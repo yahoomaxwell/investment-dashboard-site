@@ -384,12 +384,12 @@
                         <div class="sentiment-value" id="vixValue">--</div>
                     </div>
                     <div class="sentiment-item">
-                        <div class="sentiment-label">200MA Deviation</div>
-                        <div class="sentiment-value" id="deviationValue">--</div>
+                        <div class="sentiment-label">RSI(14)</div>
+                        <div class="sentiment-value" id="rsiValue">--</div>
                     </div>
                     <div class="sentiment-item">
-                        <div class="sentiment-label">PE Ratio</div>
-                        <div class="sentiment-value" id="peValue">--</div>
+                        <div class="sentiment-label">20-Day Return</div>
+                        <div class="sentiment-value" id="ret20Value">--</div>
                     </div>
                 </div>
             </div>
@@ -427,14 +427,15 @@
                         <th>Name</th>
                         <th>Price</th>
                         <th>Composite Score</th>
-                        <th>Trend</th>
-                        <th>Momentum</th>
-                        <th>Valuation</th>
-                        <th>Sentiment</th>
+                        <th>Trend(30%)</th>
+                        <th>Volatility(25%)</th>
+                        <th>Momentum(20%)</th>
+                        <th>Breadth(15%)</th>
+                        <th>RelStrength(10%)</th>
                     </tr>
                 </thead>
                 <tbody id="assetsTableBody">
-                    <tr><td colspan="8">Loading...</td></tr>
+                    <tr><td colspan="9">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -508,20 +509,21 @@
             tbody.innerHTML = '';
             Object.values(latestData.assets).forEach(asset => {
                 if (asset.error) {
-                    tbody.innerHTML += `<tr><td>${asset.symbol}</td><td>${asset.name}</td><td colspan="6" class="negative">Error: ${asset.error}</td></tr>`;
+                    tbody.innerHTML += `<tr><td>${asset.symbol}</td><td>${asset.name}</td><td colspan="7" class="negative">Error: ${asset.error}</td></tr>`;
                     return;
                 }
-                const b = asset.breakdown;
+                const p = asset.pillars;
                 tbody.innerHTML += `
                     <tr>
                         <td>${asset.symbol}</td>
                         <td>${asset.name}</td>
                         <td>${asset.currentPrice}</td>
                         <td class="${asset.compositeScore >= 60 ? 'positive' : asset.compositeScore <= 40 ? 'negative' : 'neutral'}">${asset.compositeScore}</td>
-                        <td>${b.trend.score}/35</td>
-                        <td>${b.momentum.score}/25</td>
-                        <td>${b.valuation.score ?? 'N/A'}/20</td>
-                        <td>${b.sentiment.score}/20</td>
+                        <td>${Math.round(p.trend.score)}</td>
+                        <td>${Math.round(p.volatility.score)}</td>
+                        <td>${Math.round(p.momentum.score)}</td>
+                        <td>${Math.round(p.breadth.score)}</td>
+                        <td>${Math.round(p.relStrength.score)}</td>
                     </tr>`;
             });
         }
@@ -529,16 +531,16 @@
         function updateDashboardForCurrentAsset() {
             const asset = latestData.assets[currentAssetId];
             if (!asset || asset.error) return;
-            const b = asset.breakdown;
+            const p = asset.pillars;
 
             // Top summary tiles
             document.getElementById('currentPriceValue').textContent = asset.currentPrice;
             document.getElementById('vixValue').textContent = latestData.vix ? latestData.vix.toFixed(1) : 'N/A';
-            document.getElementById('deviationValue').textContent = b.trend.deviationPct + '%';
-            document.getElementById('peValue').textContent = b.valuation.pe ? b.valuation.pe.toFixed(1) : 'N/A';
+            document.getElementById('rsiValue').textContent = p.momentum.detail.rsi;
+            document.getElementById('ret20Value').textContent = p.momentum.detail.ret20 + '%';
 
             updateScoreChart(asset.compositeScore);
-            updateFactorsChart(b);
+            updateFactorsChart(p);
 
             // NOTE: the charts below (price history, PE trend, VIX trend,
             // deviation trend, RSI) need a time-series endpoint that
@@ -594,22 +596,24 @@
             scoreChart.setOption(option);
         }
 
-        // 2. Decision Factors Chart — now reads real factor breakdown
-        function updateFactorsChart(breakdown) {
+        // 2. Decision Factors Chart — now reads the 5-pillar breakdown
+        function updateFactorsChart(pillars) {
             if (!factorsChart) {
                 factorsChart = echarts.init(document.getElementById('factorsChart'));
                 window.addEventListener('resize', () => factorsChart.resize());
             }
             const factorData = [
-                { name: 'Trend (200MA)', value: breakdown.trend.score, max: 35 },
-                { name: 'Momentum (50MA)', value: breakdown.momentum.score, max: 25 },
-                { name: 'Valuation (PE)', value: breakdown.valuation.score ?? 0, max: 20 },
-                { name: 'Sentiment (VIX)', value: breakdown.sentiment.score, max: 20 }
+                { name: 'Trend (30%)', value: pillars.trend.score },
+                { name: 'Volatility (25%)', value: pillars.volatility.score },
+                { name: 'Momentum (20%)', value: pillars.momentum.score },
+                { name: 'Breadth (15%)', value: pillars.breadth.score },
+                { name: 'RelStrength (10%)', value: pillars.relStrength.score }
             ];
             const option = {
                 grid: { left: '3%', right: '8%', top: '10%', bottom: '10%', containLabel: true },
                 xAxis: {
                     type: 'value',
+                    max: 100,
                     axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
                     splitLine: { lineStyle: { color: 'rgba(0,212,255,0.1)' } },
                     axisLabel: { color: 'rgba(255,255,255,0.6)' }
@@ -622,7 +626,7 @@
                 },
                 series: [
                     {
-                        data: factorData.map(f => f.value),
+                        data: factorData.map(f => Math.round(f.value)),
                         type: 'bar',
                         itemStyle: {
                             color: new echarts.graphic.LinearGradient(1, 0, 0, 0, [
@@ -631,12 +635,7 @@
                                 { offset: 1, color: '#00ff88' }
                             ])
                         },
-                        label: {
-                            show: true,
-                            position: 'right',
-                            color: '#00d4ff',
-                            formatter: (p) => `${p.value}/${factorData[p.dataIndex].max}`
-                        }
+                        label: { show: true, position: 'right', color: '#00d4ff' }
                     }
                 ],
                 backgroundColor: 'transparent'
