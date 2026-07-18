@@ -12,6 +12,11 @@
             box-sizing: border-box;
         }
 
+        html, body {
+            overflow-x: hidden;
+            max-width: 100%;
+        }
+
         body {
             background: linear-gradient(135deg, #0f0f23 0%, #1a1a3f 100%);
             color: #e0e0e0;
@@ -23,6 +28,7 @@
         .container {
             max-width: 1600px;
             margin: 0 auto;
+            width: 100%;
         }
 
         /* Header */
@@ -176,6 +182,13 @@
             background-clip: text;
         }
 
+        .sentiment-caption {
+            font-size: 10px;
+            color: #666;
+            margin-top: 4px;
+            line-height: 1.4;
+        }
+
         /* Indicators Row */
         .indicators-grid {
             display: grid;
@@ -207,8 +220,14 @@
             margin-bottom: 20px;
         }
 
+        .table-scroll-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
         table {
             width: 100%;
+            min-width: 700px;
             border-collapse: collapse;
             overflow: hidden;
         }
@@ -357,14 +376,12 @@
             <div class="card score-panel">
                 <div class="card-title">Composite Score</div>
                 <div id="scoreChart"></div>
-                <div style="margin-top: 10px; font-size: 12px; color: #888;">
-    🟢 70-100 Favorable &nbsp; 🟡 45-69 Neutral &nbsp; 🔴 0-44 Caution
-</div>
             </div>
 
             <!-- Middle: Price & Trend Chart -->
             <div class="card price-trend-panel">
                 <div class="card-title">Price & Trend Analysis</div>
+                <div style="font-size: 10px; color: #666; margin-bottom: 8px;">Illustrative trend, anchored to live price</div>
                 <div id="priceChart"></div>
             </div>
 
@@ -381,18 +398,22 @@
                     <div class="sentiment-item">
                         <div class="sentiment-label">Current Price</div>
                         <div class="sentiment-value" id="currentPriceValue">--</div>
+                        <div class="sentiment-caption">Latest close price</div>
                     </div>
                     <div class="sentiment-item">
                         <div class="sentiment-label">Volatility Index (VIX)</div>
                         <div class="sentiment-value" id="vixValue">--</div>
+                        <div class="sentiment-caption">US fear gauge, reference only</div>
                     </div>
                     <div class="sentiment-item">
                         <div class="sentiment-label">RSI(14)</div>
                         <div class="sentiment-value" id="rsiValue">--</div>
+                        <div class="sentiment-caption">Overbought &gt;70, oversold &lt;30</div>
                     </div>
                     <div class="sentiment-item">
                         <div class="sentiment-label">20-Day Return</div>
                         <div class="sentiment-value" id="ret20Value">--</div>
+                        <div class="sentiment-caption">Price change over last 20 trading days</div>
                     </div>
                 </div>
             </div>
@@ -423,6 +444,7 @@
         <!-- Tracked Assets Table -->
         <div class="card table-panel">
             <div class="card-title">Tracked Assets (Live)</div>
+            <div class="table-scroll-wrapper">
             <table>
                 <thead>
                     <tr>
@@ -441,6 +463,7 @@
                     <tr><td colspan="9">Loading...</td></tr>
                 </tbody>
             </table>
+            </div>
         </div>
 
         <div class="footer">
@@ -544,9 +567,10 @@
 
             updateScoreChart(asset.compositeScore);
             updateFactorsChart(p);
+            createPriceChart(asset.currentPrice); // re-anchor the illustrative chart to the real live price
 
-            // NOTE: the charts below (price history, PE trend, VIX trend,
-            // deviation trend, RSI) need a time-series endpoint that
+            // NOTE: the charts below (PE trend, VIX trend, deviation trend,
+            // RSI) still need a time-series endpoint that
             // market-data-service doesn't provide yet — it only returns the
             // latest snapshot. These stay illustrative/mock for now.
             // TODO: once /api/history/:id exists, replace generateXData()
@@ -651,17 +675,21 @@
         // These need a historical time-series API endpoint to go live.
         // ============================================
         function initIllustrativeCharts() {
-            createPriceChart();
             createPEChart();
             createVIXChart();
             createDeviationChart();
             createRSIChart();
+            // priceChart is created later in updateDashboardForCurrentAsset(),
+            // once we know the real live price to anchor it to.
         }
 
-        function createPriceChart() {
-            priceChart = echarts.init(document.getElementById('priceChart'));
+        function createPriceChart(basePrice) {
+            if (!priceChart) {
+                priceChart = echarts.init(document.getElementById('priceChart'));
+                window.addEventListener('resize', () => priceChart.resize());
+            }
             const dates = generateDateArray(30);
-            const priceData = generatePriceData(30);
+            const priceData = generatePriceData(30, basePrice);
             const trendData = generateTrendData(30);
             const option = {
                 grid: { left: '5%', right: '5%', top: '5%', bottom: '10%', containLabel: true },
@@ -669,7 +697,7 @@
                 legend: { data: ['Close Price', 'Trend Score'], textStyle: { color: 'rgba(255,255,255,0.8)' }, top: '0%' },
                 xAxis: { type: 'category', data: dates, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, axisLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 10 } },
                 yAxis: [
-                    { type: 'value', name: 'Price', position: 'left', axisLine: { lineStyle: { color: 'rgba(0,212,255,0.5)' } }, axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(0,212,255,0.1)' } } },
+                    { type: 'value', name: 'Price', position: 'left', scale: true, axisLine: { lineStyle: { color: 'rgba(0,212,255,0.5)' } }, axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(0,212,255,0.1)' } } },
                     { type: 'value', name: 'Trend Score', position: 'right', axisLine: { lineStyle: { color: 'rgba(255,187,51,0.5)' } }, axisLabel: { color: 'rgba(255,255,255,0.6)' } }
                 ],
                 series: [
@@ -679,7 +707,6 @@
                 backgroundColor: 'transparent'
             };
             priceChart.setOption(option);
-            window.addEventListener('resize', () => priceChart.resize());
         }
 
         function createPEChart() {
@@ -766,9 +793,21 @@
             }
             return dates;
         }
-        function generatePriceData(count) {
-            const data = []; let price = 100;
-            for (let i = 0; i < count; i++) { price += (Math.random() - 0.48) * 2; data.push(Math.round(price * 100) / 100); }
+        function generatePriceData(count, basePrice) {
+            const data = [];
+            let price = basePrice || 100;
+            // Walk backward from the real current price so the chart's
+            // scale matches the actual asset (e.g. QQQ ~700s, CSI300 ~4700s)
+            // instead of always starting near 100.
+            const walk = [];
+            for (let i = 0; i < count; i++) {
+                walk.push((Math.random() - 0.5) * price * 0.01); // ~1% daily noise
+            }
+            let running = price;
+            for (let i = count - 1; i >= 0; i--) {
+                data[i] = Math.round(running * 100) / 100;
+                running -= walk[i];
+            }
             return data;
         }
         function generateTrendData(count) {
