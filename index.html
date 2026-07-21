@@ -381,7 +381,7 @@
             <!-- Middle: Price & Trend Chart -->
             <div class="card price-trend-panel">
                 <div class="card-title">Price & Trend Analysis</div>
-                <div style="font-size: 10px; color: #666; margin-bottom: 8px;">Illustrative trend, anchored to live price</div>
+                <div id="priceChartCaption" style="font-size: 10px; color: #666; margin-bottom: 8px;">Loading...</div>
                 <div id="priceChart"></div>
             </div>
 
@@ -567,7 +567,7 @@
 
             updateScoreChart(asset.compositeScore);
             updateFactorsChart(p);
-            createPriceChart(asset.currentPrice); // re-anchor the illustrative chart to the real live price
+            loadRealPriceHistory(currentAssetId); // fetch real historical price + score, replacing the illustrative chart
 
             // NOTE: the charts below (PE trend, VIX trend, deviation trend,
             // RSI) still need a time-series endpoint that
@@ -683,26 +683,48 @@
             // once we know the real live price to anchor it to.
         }
 
-        function createPriceChart(basePrice) {
+        // Fetches real historical price + backfilled score from the new
+        // /api/history/:id endpoint, and renders the real chart.
+        // Falls back to the illustrative (mock) version if the endpoint
+        // isn't reachable yet (e.g. older backend not redeployed).
+        async function loadRealPriceHistory(assetId) {
+            try {
+                const res = await fetch(`${API_BASE}/api/history/${assetId}`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                const dates = data.history.map(h => h.date);
+                const priceData = data.history.map(h => h.price);
+                const trendData = data.history.map(h => h.score);
+                renderPriceChart(dates, priceData, trendData, true);
+            } catch (err) {
+                console.warn('Falling back to illustrative price chart:', err.message);
+                const dates = generateDateArray(30);
+                const priceData = generatePriceData(30, latestData?.assets?.[assetId]?.currentPrice);
+                const trendData = generateTrendData(30);
+                renderPriceChart(dates, priceData, trendData, false);
+            }
+        }
+
+        function renderPriceChart(dates, priceData, trendData, isReal) {
             if (!priceChart) {
                 priceChart = echarts.init(document.getElementById('priceChart'));
                 window.addEventListener('resize', () => priceChart.resize());
             }
-            const dates = generateDateArray(30);
-            const priceData = generatePriceData(30, basePrice);
-            const trendData = generateTrendData(30);
+            document.getElementById('priceChartCaption').textContent = isReal
+                ? 'Real historical price + backfilled composite score (last ~60 trading days)'
+                : 'Illustrative trend, anchored to live price (real history unavailable)';
             const option = {
                 grid: { left: '5%', right: '5%', top: '5%', bottom: '10%', containLabel: true },
                 tooltip: { trigger: 'axis', backgroundColor: 'rgba(10,10,30,0.9)', borderColor: 'rgba(0,212,255,0.3)' },
-                legend: { data: ['Close Price', 'Trend Score'], textStyle: { color: 'rgba(255,255,255,0.8)' }, top: '0%' },
+                legend: { data: ['Close Price', 'Composite Score'], textStyle: { color: 'rgba(255,255,255,0.8)' }, top: '0%' },
                 xAxis: { type: 'category', data: dates, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, axisLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 10 } },
                 yAxis: [
                     { type: 'value', name: 'Price', position: 'left', scale: true, axisLine: { lineStyle: { color: 'rgba(0,212,255,0.5)' } }, axisLabel: { color: 'rgba(255,255,255,0.6)' }, splitLine: { lineStyle: { color: 'rgba(0,212,255,0.1)' } } },
-                    { type: 'value', name: 'Trend Score', position: 'right', axisLine: { lineStyle: { color: 'rgba(255,187,51,0.5)' } }, axisLabel: { color: 'rgba(255,255,255,0.6)' } }
+                    { type: 'value', name: 'Composite Score', position: 'right', min: 0, max: 100, axisLine: { lineStyle: { color: 'rgba(255,187,51,0.5)' } }, axisLabel: { color: 'rgba(255,255,255,0.6)' } }
                 ],
                 series: [
                     { name: 'Close Price', data: priceData, type: 'line', yAxisIndex: 0, smooth: true, itemStyle: { color: '#00d4ff' }, lineStyle: { color: '#00d4ff', width: 2 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(0,212,255,0.3)' }, { offset: 1, color: 'rgba(0,212,255,0)' }]) } },
-                    { name: 'Trend Score', data: trendData, type: 'line', yAxisIndex: 1, smooth: true, itemStyle: { color: '#ffbb33' }, lineStyle: { color: '#ffbb33', width: 2 } }
+                    { name: 'Composite Score', data: trendData, type: 'line', yAxisIndex: 1, smooth: true, itemStyle: { color: '#ffbb33' }, lineStyle: { color: '#ffbb33', width: 2 } }
                 ],
                 backgroundColor: 'transparent'
             };
