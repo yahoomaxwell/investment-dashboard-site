@@ -273,6 +273,10 @@
             color: #ffbb33;
         }
 
+        .defensive {
+            color: #ff9933;
+        }
+
         /* Responsive Design */
         @media (max-width: 1400px) {
             .main-grid {
@@ -376,6 +380,10 @@
             <div class="card score-panel">
                 <div class="card-title">Composite Score</div>
                 <div id="scoreChart"></div>
+                <div style="font-size: 10px; color: #999; text-align: center; margin-top: 4px; line-height: 1.6;">
+                    🟢 80-100 Full Position &nbsp; 🟡 60-80 Scale In<br>
+                    🟠 45-60 Defensive &nbsp; 🔴 0-45 Deep Defense
+                </div>
             </div>
 
             <!-- Middle: Price & Trend Chart -->
@@ -544,7 +552,7 @@
                         <td>${asset.symbol}</td>
                         <td>${asset.name}</td>
                         <td>${asset.currentPrice}</td>
-                        <td class="${asset.compositeScore >= 60 ? 'positive' : asset.compositeScore <= 40 ? 'negative' : 'neutral'}">${asset.compositeScore}</td>
+                        <td class="${asset.compositeScore >= 80 ? 'positive' : asset.compositeScore >= 60 ? 'neutral' : asset.compositeScore >= 45 ? 'defensive' : 'negative'}">${asset.compositeScore}</td>
                         <td>${Math.round(p.trend.score)}</td>
                         <td>${Math.round(p.volatility.score)}</td>
                         <td>${Math.round(p.momentum.score)}</td>
@@ -598,9 +606,10 @@
                             lineStyle: {
                                 width: 12,
                                 color: [
-                                    [0.3, '#ff4466'],
-                                    [0.7, '#ffbb33'],
-                                    [1, '#00ff88']
+                                    [0.45, '#ff4466'],  // 0-45  深度防御 Deep Defense
+                                    [0.60, '#ff9933'],  // 45-60 防御 Defensive
+                                    [0.80, '#ffbb33'],  // 60-80 逐步加仓 Scale In
+                                    [1,    '#00ff88']   // 80-100 满仓 Full Position
                                 ]
                             }
                         },
